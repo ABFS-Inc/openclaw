@@ -187,6 +187,7 @@ describe("gateway canvas host auth", () => {
             );
             expect(otherIpStillBlocked.status).toBe(401);
 
+            // Public IP with a non-node client is still blocked.
             clients.add({
               socket: {} as unknown as WebSocket,
               connect: {} as never,
@@ -203,6 +204,22 @@ describe("gateway canvas host auth", () => {
             await expectWsRejected(`ws://127.0.0.1:${listener.port}${CANVAS_WS_PATH}`, {
               "x-forwarded-for": publicIp,
             });
+
+            // Public IP with a node client is allowed (canvas WebView on mobile).
+            const nodePublicIp = "198.51.100.42";
+            clients.add({
+              socket: {} as unknown as WebSocket,
+              connect: { role: "node" } as never,
+              connId: "c-node-public",
+              clientIp: nodePublicIp,
+            });
+            const nodePublicAllowed = await fetch(
+              `http://127.0.0.1:${listener.port}${CANVAS_HOST_PATH}/`,
+              {
+                headers: { "x-forwarded-for": nodePublicIp },
+              },
+            );
+            expect(nodePublicAllowed.status).toBe(200);
 
             clients.add({
               socket: {} as unknown as WebSocket,

@@ -106,6 +106,15 @@ function hasAuthorizedWsClientForIp(clients: Set<GatewayWsClient>, clientIp: str
   return false;
 }
 
+function hasAuthorizedNodeClientForIp(clients: Set<GatewayWsClient>, clientIp: string): boolean {
+  for (const client of clients) {
+    if (client.clientIp === clientIp && client.connect?.role === "node") {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function authorizeCanvasRequest(params: {
   req: IncomingMessage;
   auth: ResolvedGatewayAuth;
@@ -144,15 +153,20 @@ async function authorizeCanvasRequest(params: {
     return lastAuthFailure ?? { ok: false, reason: "unauthorized" };
   }
 
-  // IP-based fallback is only safe for machine-scoped addresses.
-  // Only allow IP-based fallback for private/loopback addresses to prevent
-  // cross-session access in shared-IP environments (corporate NAT, cloud).
-  if (!isPrivateOrLoopbackAddress(clientIp)) {
-    return lastAuthFailure ?? { ok: false, reason: "unauthorized" };
+  // IP-based fallback for private/loopback addresses: allow if any WS client shares the IP.
+  if (isPrivateOrLoopbackAddress(clientIp)) {
+    if (hasAuthorizedWsClientForIp(clients, clientIp)) {
+      return { ok: true };
+    }
   }
-  if (hasAuthorizedWsClientForIp(clients, clientIp)) {
+
+  // Allow requests from IPs that match a connected, authenticated node.
+  // This enables node WebViews (canvas) to fetch assets over HTTP even when
+  // the node's IP is public (e.g. mobile devices connecting through Railway/cloud).
+  if (hasAuthorizedNodeClientForIp(clients, clientIp)) {
     return { ok: true };
   }
+
   return lastAuthFailure ?? { ok: false, reason: "unauthorized" };
 }
 
